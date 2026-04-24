@@ -21,21 +21,37 @@ class EmptyComponent implements Component {
 
 const EMPTY_COMPONENT = new EmptyComponent();
 
-class RightAlignedDescriptionComponent implements Component {
+class HiddenToolCallSummaryComponent implements Component {
   constructor(
-    private readonly description: string,
-    private readonly renderText: (text: string) => string,
+    private readonly component: Component,
+    private readonly fallbackDescription: string,
+    private readonly renderFallback: (text: string) => string,
+    private readonly renderLineBackground: (text: string) => string,
   ) {}
 
   render(width: number): string[] {
     if (width <= 0) return [];
 
-    const truncated = truncateToWidth(this.description, width, "...");
-    const pad = " ".repeat(Math.max(0, width - visibleWidth(truncated)));
-    return [`${pad}${this.renderText(truncated)}`];
+    const summaryWidth = Math.max(1, Math.floor(width / 4));
+    const rendered = this.component
+      .render(summaryWidth)
+      .map((line) => truncateToWidth(line, summaryWidth, "..."))
+      .filter((line) => hasVisibleNonWhitespace(line));
+
+    const lines = rendered.length > 0
+      ? rendered.slice(0, 2)
+      : [this.renderFallback(truncateToWidth(this.fallbackDescription, summaryWidth, "..."))];
+
+    return lines.map((line) => {
+      const withBg = this.renderLineBackground(line);
+      const pad = " ".repeat(Math.max(0, width - visibleWidth(withBg)));
+      return `${pad}${withBg}`;
+    });
   }
 
-  invalidate(): void {}
+  invalidate(): void {
+    this.component.invalidate();
+  }
 }
 
 type VisibilityMode = "expanded" | "collapsed" | "hide-older" | "hide-all";
@@ -111,6 +127,10 @@ function formatTokens(count: number): string {
   return `${Math.round(count / 1000000)}M`;
 }
 
+function hasVisibleNonWhitespace(text: string): boolean {
+  return text.replace(/\x1b\[[0-9;]*m/g, "").trim().length > 0;
+}
+
 export default function piToolVisibility(pi: ExtensionAPI) {
   const STATE_CUSTOM_TYPE = "pi-tool-visibility/state";
 
@@ -147,7 +167,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
 
     const meter = mode === "hide-all"
       ? " "
-      : ctx.ui.theme.bg("toolPendingBg", glyphByMode[mode]);
+      : ctx.ui.theme.fg("dim", glyphByMode[mode]);
     const themedStatus = `${ctx.ui.theme.fg("muted", "tools:")}${ctx.ui.theme.fg("muted", "[")}${meter}${ctx.ui.theme.fg("muted", "]")}`;
 
     ctx.ui.setStatus("pi-tool-visibility", themedStatus);
@@ -339,14 +359,21 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       },
 
       renderCall(args, theme, context): Component {
+        const delegate = getBuiltInTools(context.cwd)[toolName];
+
         if (shouldHideToolCall(context.toolCallId)) {
-          return new RightAlignedDescriptionComponent(
-            getBuiltInTools(context.cwd)[toolName].description,
-            (text) => theme.fg("muted", text),
+          const component = typeof delegate.renderCall === "function"
+            ? delegate.renderCall(args, theme, context)
+            : EMPTY_COMPONENT;
+
+          return new HiddenToolCallSummaryComponent(
+            component,
+            delegate.description,
+            (text) => theme.fg("toolTitle", text),
+            (text) => theme.bg("toolPendingBg", text),
           );
         }
 
-        const delegate = getBuiltInTools(context.cwd)[toolName];
         if (typeof delegate.renderCall === "function") {
           return delegate.renderCall(args, theme, context);
         }
@@ -400,7 +427,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     requestFooterRender?.();
   });
 
-  pi.registerShortcut("ctrl+shift+o", {
+  pi.registerShortcut("ctrl+alt+o", {
     description: "Cycle tool visibility (hide all -> hide older -> collapsed -> expanded)",
     handler: async (ctx) => {
       mode = nextMode(mode);
