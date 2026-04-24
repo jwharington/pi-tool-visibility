@@ -144,6 +144,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
   let latestToolCallId: string | null = null;
   let latestWrappedToolCallId: string | null = null;
   let requestFooterRender: (() => void) | null = null;
+  let persistModeTimer: ReturnType<typeof setTimeout> | null = null;
   const activeToolCallIds = new Set<string>();
   const wrappedToolCallIds = new Set<string>();
 
@@ -152,10 +153,16 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     latestToolCallId = toolCallId;
   };
 
-  const rememberWrappedToolCall = (toolCallId: string | undefined): void => {
+  const rememberWrappedToolCall = (
+    toolCallId: string | undefined,
+    options: { markLatest?: boolean } = {},
+  ): void => {
     if (!toolCallId) return;
+    const { markLatest = true } = options;
     wrappedToolCallIds.add(toolCallId);
-    latestWrappedToolCallId = toolCallId;
+    if (markLatest || latestWrappedToolCallId === null) {
+      latestWrappedToolCallId = toolCallId;
+    }
     rememberToolCall(toolCallId);
   };
 
@@ -190,8 +197,16 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     requestFooterRender?.();
   };
 
-  const persistMode = (): void => {
+  const persistModeNow = (): void => {
     pi.appendEntry(STATE_CUSTOM_TYPE, { mode, updatedAt: new Date().toISOString() });
+  };
+
+  const persistMode = (): void => {
+    if (persistModeTimer) clearTimeout(persistModeTimer);
+    persistModeTimer = setTimeout(() => {
+      persistModeTimer = null;
+      persistModeNow();
+    }, 120);
   };
 
   const loadPersistedModeFromSession = (ctx: any): VisibilityMode | undefined => {
@@ -453,7 +468,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     const eventToolName = eventAny?.toolName ?? eventAny?.name ?? eventAny?.tool;
     activeToolCallIds.delete(event.toolCallId);
     if (isBuiltInToolName(eventToolName) || wrappedToolCallIds.has(event.toolCallId)) {
-      rememberWrappedToolCall(event.toolCallId);
+      rememberWrappedToolCall(event.toolCallId, { markLatest: false });
     } else {
       rememberToolCall(event.toolCallId);
     }
