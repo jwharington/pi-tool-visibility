@@ -9,15 +9,34 @@ import {
   createWriteToolDefinition,
   type ExtensionAPI,
 } from "@mariozechner/pi-coding-agent";
-import type { Component } from "@mariozechner/pi-tui";
+import { truncateToWidth, visibleWidth, type Component } from "@mariozechner/pi-tui";
 
 class EmptyComponent implements Component {
   render(_width: number): string[] {
     return [];
   }
+
+  invalidate(): void {}
 }
 
 const EMPTY_COMPONENT = new EmptyComponent();
+
+class RightAlignedDescriptionComponent implements Component {
+  constructor(
+    private readonly description: string,
+    private readonly renderText: (text: string) => string,
+  ) {}
+
+  render(width: number): string[] {
+    if (width <= 0) return [];
+
+    const truncated = truncateToWidth(this.description, width, "...");
+    const pad = " ".repeat(Math.max(0, width - visibleWidth(truncated)));
+    return [`${pad}${this.renderText(truncated)}`];
+  }
+
+  invalidate(): void {}
+}
 
 type VisibilityMode = "expanded" | "collapsed" | "hide-older" | "hide-all";
 
@@ -77,11 +96,27 @@ function nextMode(current: VisibilityMode): VisibilityMode {
   return MODE_ORDER[(i + 1) % MODE_ORDER.length] ?? "expanded";
 }
 
+function sanitizeStatusText(text: string): string {
+  return text
+    .replace(/[\r\n\t]/g, " ")
+    .replace(/ +/g, " ")
+    .trim();
+}
+
+function formatTokens(count: number): string {
+  if (count < 1000) return count.toString();
+  if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
+  if (count < 1000000) return `${Math.round(count / 1000)}k`;
+  if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
+  return `${Math.round(count / 1000000)}M`;
+}
+
 export default function piToolVisibility(pi: ExtensionAPI) {
   const STATE_CUSTOM_TYPE = "pi-tool-visibility/state";
 
   let mode: VisibilityMode = "collapsed";
   let latestToolCallId: string | null = null;
+  let requestFooterRender: (() => void) | null = null;
   const activeToolCallIds = new Set<string>();
 
   const rememberToolCall = (toolCallId: string | undefined): void => {
@@ -116,6 +151,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     const themedStatus = `${ctx.ui.theme.fg("muted", "tools:")}${ctx.ui.theme.fg("muted", "[")}${meter}${ctx.ui.theme.fg("muted", "]")}`;
 
     ctx.ui.setStatus("pi-tool-visibility", themedStatus);
+    requestFooterRender?.();
   };
 
   const persistMode = (): void => {
@@ -148,6 +184,138 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     }
   };
 
+  const installFooter = (ctx: any): void => {
+    ctx.ui.setFooter((tui, theme, footerData) => {
+      const footerRender = () => tui.requestRender();
+      requestFooterRender = footerRender;
+      const stopWatchingBranch = footerData.onBranchChange(() => tui.requestRender());
+
+      return {
+        dispose() {
+          if (requestFooterRender === footerRender) requestFooterRender = null;
+          stopWatchingBranch();
+        },
+        invalidate() {},
+        render(width: number): string[] {
+          const entries = ctx.sessionManager.getEntries();
+          let totalInput = 0;
+          let totalOutput = 0;
+          let totalCacheRead = 0;
+          let totalCacheWrite = 0;
+          let totalCost = 0;
+
+          for (const entry of entries) {
+            if (entry.type === "message" && entry.message.role === "assistant") {
+              totalInput += entry.message.usage.input;
+              totalOutput += entry.message.usage.output;
+              totalCacheRead += entry.message.usage.cacheRead;
+              totalCacheWrite += entry.message.usage.cacheWrite;
+              totalCost += entry.message.usage.cost.total;
+            }
+          }
+
+          const contextUsage = ctx.getContextUsage();
+          const contextWindow = contextUsage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
+          const contextPercentValue = contextUsage?.percent ?? 0;
+          const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
+          const contextPercentDisplay = contextPercent === "?"
+            ? `?/${formatTokens(contextWindow)}`
+            : `${contextPercent}%/${formatTokens(contextWindow)}`;
+
+          let contextPercentText = contextPercentDisplay;
+          if (contextPercentValue > 90) {
+            contextPercentText = theme.fg("error", contextPercentDisplay);
+          } else if (contextPercentValue > 70) {
+            contextPercentText = theme.fg("warning", contextPercentDisplay);
+          }
+
+          const statsParts: string[] = [];
+          if (totalInput) statsParts.push(`↑${formatTokens(totalInput)}`);
+          if (totalOutput) statsParts.push(`↓${formatTokens(totalOutput)}`);
+          if (totalCacheRead) statsParts.push(`R${formatTokens(totalCacheRead)}`);
+          if (totalCacheWrite) statsParts.push(`W${formatTokens(totalCacheWrite)}`);
+
+          const usingSubscription = ctx.model ? ctx.modelRegistry.isUsingOAuth(ctx.model) : false;
+          if (totalCost || usingSubscription) {
+            statsParts.push(`$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`);
+          }
+          statsParts.push(contextPercentText);
+
+          let left = statsParts.join(" ");
+          let leftWidth = visibleWidth(left);
+          if (leftWidth > width) {
+            left = truncateToWidth(left, width, "...");
+            leftWidth = visibleWidth(left);
+          }
+
+          let pwd = ctx.cwd;
+          const home = process.env.HOME || process.env.USERPROFILE;
+          if (home && pwd.startsWith(home)) {
+            pwd = `~${pwd.slice(home.length)}`;
+          }
+
+          const branch = footerData.getGitBranch();
+          if (branch) {
+            pwd = `${pwd} (${branch})`;
+          }
+
+          const sessionName = pi.getSessionName();
+          if (sessionName) {
+            pwd = `${pwd} • ${sessionName}`;
+          }
+
+          const statuses = footerData.getExtensionStatuses();
+          const toolStatus = sanitizeStatusText(statuses.get("pi-tool-visibility") ?? "");
+
+          const modelName = ctx.model?.id || "no-model";
+          let modelText = modelName;
+          if (ctx.model?.reasoning) {
+            const thinkingLevel = (ctx.sessionManager as any).state?.thinkingLevel || "off";
+            modelText = thinkingLevel === "off"
+              ? `${modelName} • thinking off`
+              : `${modelName} • ${thinkingLevel}`;
+          }
+
+          if (footerData.getAvailableProviderCount() > 1 && ctx.model) {
+            const candidate = `(${ctx.model.provider}) ${modelText}`;
+            if (leftWidth + 2 + visibleWidth(candidate) <= width) {
+              modelText = candidate;
+            }
+          }
+
+          const rightSegments = [modelText, toolStatus].filter(Boolean);
+          let right = rightSegments.join("  ");
+          const availableForRight = Math.max(0, width - leftWidth - 2);
+          if (availableForRight === 0) {
+            right = "";
+          } else if (visibleWidth(right) > availableForRight) {
+            right = truncateToWidth(right, availableForRight, "...");
+          }
+
+          let statsLine = theme.fg("dim", left);
+          if (right) {
+            const padding = " ".repeat(Math.max(2, width - leftWidth - visibleWidth(right)));
+            statsLine += theme.fg("dim", `${padding}${right}`);
+          }
+
+          const lines = [truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "...")), truncateToWidth(statsLine, width)];
+
+          const otherStatuses = Array.from(statuses.entries())
+            .filter(([key]) => key !== "pi-tool-visibility")
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([, text]) => sanitizeStatusText(text))
+            .filter(Boolean);
+
+          if (otherStatuses.length > 0) {
+            lines.push(truncateToWidth(otherStatuses.join(" "), width, theme.fg("dim", "...")));
+          }
+
+          return lines;
+        },
+      };
+    });
+  };
+
   const registerWrappedTool = (toolName: BuiltInToolName): void => {
     pi.registerTool({
       name: toolName,
@@ -171,7 +339,12 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       },
 
       renderCall(args, theme, context): Component {
-        if (shouldHideToolCall(context.toolCallId)) return EMPTY_COMPONENT;
+        if (shouldHideToolCall(context.toolCallId)) {
+          return new RightAlignedDescriptionComponent(
+            getBuiltInTools(context.cwd)[toolName].description,
+            (text) => theme.fg("muted", text),
+          );
+        }
 
         const delegate = getBuiltInTools(context.cwd)[toolName];
         if (typeof delegate.renderCall === "function") {
@@ -206,6 +379,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     const restoredMode = loadPersistedModeFromSession(ctx);
     mode = restoredMode ?? (ctx.ui.getToolsExpanded() ? "expanded" : "collapsed");
     bootstrapFromSession(ctx);
+    installFooter(ctx);
     applyMode(ctx);
     ctx.ui.notify(
       `pi-tool-visibility loaded (${MODE_LABEL[mode]}). Use /tool-visibility cycle|expanded|collapsed|hide-older|hide-all.`,
@@ -217,11 +391,13 @@ export default function piToolVisibility(pi: ExtensionAPI) {
   pi.on("tool_execution_start", (event, _ctx) => {
     rememberToolCall(event.toolCallId);
     activeToolCallIds.add(event.toolCallId);
+    requestFooterRender?.();
   });
 
   pi.on("tool_execution_end", (event, _ctx) => {
     activeToolCallIds.delete(event.toolCallId);
     rememberToolCall(event.toolCallId);
+    requestFooterRender?.();
   });
 
   pi.registerShortcut("ctrl+shift+o", {
