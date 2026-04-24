@@ -77,8 +77,8 @@ function nextMode(current: VisibilityMode): VisibilityMode {
   return MODE_ORDER[(i + 1) % MODE_ORDER.length] ?? "expanded";
 }
 
-export default function customToolVisibility(pi: ExtensionAPI) {
-  const STATE_CUSTOM_TYPE = "custom-tool-visibility/state";
+export default function piToolVisibility(pi: ExtensionAPI) {
+  const STATE_CUSTOM_TYPE = "pi-tool-visibility/state";
 
   let mode: VisibilityMode = "collapsed";
   let latestToolCallId: string | null = null;
@@ -115,7 +115,7 @@ export default function customToolVisibility(pi: ExtensionAPI) {
       : ctx.ui.theme.bg("toolPendingBg", glyphByMode[mode]);
     const themedStatus = `${ctx.ui.theme.fg("muted", "tools:")}${ctx.ui.theme.fg("muted", "[")}${meter}${ctx.ui.theme.fg("muted", "]")}`;
 
-    ctx.ui.setStatus("custom-tool-visibility", themedStatus);
+    ctx.ui.setStatus("pi-tool-visibility", themedStatus);
   };
 
   const persistMode = (): void => {
@@ -207,7 +207,7 @@ export default function customToolVisibility(pi: ExtensionAPI) {
     bootstrapFromSession(ctx);
     applyMode(ctx);
     ctx.ui.notify(
-      `custom-tool-visibility loaded (${MODE_LABEL[mode]}). Use /tool-visibility cycle|expanded|collapsed|hide-older|hide-all.`,
+      `pi-tool-visibility loaded (${MODE_LABEL[mode]}). Use /tool-visibility cycle|expanded|collapsed|hide-older|hide-all.`,
       "info",
       { timeout: 2500 },
     );

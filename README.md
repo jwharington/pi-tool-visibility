@@ -1,4 +1,4 @@
-# custom-tool-visibility
+# pi-tool-visibility
 
 Pi extension that adds a 4-state tool visibility cycle:
 
@@ -22,7 +22,7 @@ The extension registers `Ctrl+O` to cycle modes.
 
 ## Persistence
 
-Mode changes are persisted into the current session via a custom session entry (`custom-tool-visibility/state`).
+Mode changes are persisted into the current session via a custom session entry (`pi-tool-visibility/state`).
 That means your last mode is restored after `/reload` and when reopening that session.
 
 > Note: if `Ctrl+O` is still bound to built-in `app.tools.expand`, Pi may reserve that key and skip the extension shortcut.
@@ -47,7 +47,7 @@ Add to your Pi settings:
 ```json
 {
   "extensions": [
-    "/home/jmw/opt/AI/custom-tool-visibility/index.ts"
+    "/home/jmw/opt/AI/pi-tool-visibility/index.ts"
   ]
 }
 ```
