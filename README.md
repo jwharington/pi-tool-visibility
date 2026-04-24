@@ -38,11 +38,31 @@ Example remap:
 
 Then `/reload`.
 
-## Load extension
+## Install as a Pi package
 
-Add to your Pi settings:
+You can install this repo directly as a Pi package:
+
+```bash
+pi install https://github.com/jwharington/pi-tool-visibility
+```
+
+Or add it to your Pi settings:
 
 `~/.pi/agent/settings.json` (global) or `.pi/settings.json` (project)
+
+```json
+{
+  "packages": [
+    "https://github.com/jwharington/pi-tool-visibility"
+  ]
+}
+```
+
+Then restart Pi or run `/reload`.
+
+## Load extension directly
+
+If you prefer to load the raw extension file instead of using Pi packages:
 
 ```json
 {
@@ -51,8 +71,6 @@ Add to your Pi settings:
   ]
 }
 ```
-
-Then restart Pi or run `/reload`.
 
 ## Scope
 
