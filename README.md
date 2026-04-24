@@ -18,25 +18,17 @@ Pi extension that adds a 4-state tool visibility cycle:
 
 ## Shortcut
 
-The extension registers `Ctrl+O` to cycle modes.
+The extension registers `Ctrl+Shift+O` to cycle modes by default.
 
 ## Persistence
 
 Mode changes are persisted into the current session via a custom session entry (`pi-tool-visibility/state`).
 That means your last mode is restored after `/reload` and when reopening that session.
 
-> Note: if `Ctrl+O` is still bound to built-in `app.tools.expand`, Pi may reserve that key and skip the extension shortcut.
-> In that case, remap `app.tools.expand` in `~/.pi/agent/keybindings.json`.
+> Older versions used `Ctrl+O`, which can conflict with Pi's built-in `app.tools.expand` binding.
+> The default is now `Ctrl+Shift+O` to avoid that conflict.
 
-Example remap:
-
-```json
-{
-  "app.tools.expand": "ctrl+shift+o"
-}
-```
-
-Then `/reload`.
+If you previously remapped keybindings for this extension, you may want to remove the override and `/reload`.
 
 ## Install as a Pi package
 

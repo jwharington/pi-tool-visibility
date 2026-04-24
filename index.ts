@@ -224,7 +224,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     rememberToolCall(event.toolCallId);
   });
 
-  pi.registerShortcut("ctrl+o", {
+  pi.registerShortcut("ctrl+shift+o", {
     description: "Cycle tool visibility (expanded -> collapsed -> hide older -> hide all)",
     handler: async (ctx) => {
       mode = nextMode(mode);
