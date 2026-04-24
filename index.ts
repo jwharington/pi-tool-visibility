@@ -22,10 +22,10 @@ const EMPTY_COMPONENT = new EmptyComponent();
 type VisibilityMode = "expanded" | "collapsed" | "hide-older" | "hide-all";
 
 const MODE_ORDER: VisibilityMode[] = [
-  "expanded",
-  "collapsed",
-  "hide-older",
   "hide-all",
+  "hide-older",
+  "collapsed",
+  "expanded",
 ];
 
 const MODE_LABEL: Record<VisibilityMode, string> = {
@@ -225,7 +225,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
   });
 
   pi.registerShortcut("ctrl+shift+o", {
-    description: "Cycle tool visibility (expanded -> collapsed -> hide older -> hide all)",
+    description: "Cycle tool visibility (hide all -> hide older -> collapsed -> expanded)",
     handler: async (ctx) => {
       mode = nextMode(mode);
       persistMode();
