@@ -168,9 +168,12 @@ export default function piToolVisibility(pi: ExtensionAPI) {
 
   const shouldHideToolCall = (toolCallId: string): boolean => {
     if (mode === "expanded" || mode === "collapsed") return false;
+
+    // Never hide in-progress tool executions.
+    if (activeToolCallIds.has(toolCallId)) return false;
+
     if (mode === "hide-all") return true;
     if (mode === "hide-older") {
-      if (activeToolCallIds.has(toolCallId)) return false;
       const latestVisibleToolCallId = latestWrappedToolCallId ?? latestToolCallId;
       return latestVisibleToolCallId !== null && toolCallId !== latestVisibleToolCallId;
     }
@@ -418,9 +421,21 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       },
 
       renderResult(result, options, theme, context): Component {
-        if (shouldHideToolCall(context.toolCallId)) return EMPTY_COMPONENT;
-
         const delegate = getBuiltInTools(context.cwd)[toolName];
+
+        if (shouldHideToolCall(context.toolCallId)) {
+          if (typeof delegate.renderResult === "function") {
+            try {
+              // Let delegate advance/cleanup internal renderer state (e.g. timers),
+              // but keep result content hidden.
+              delegate.renderResult(result, options, theme, context);
+            } catch {
+              // Ignore hidden render errors.
+            }
+          }
+          return EMPTY_COMPONENT;
+        }
+
         if (typeof delegate.renderResult === "function") {
           return delegate.renderResult(result, options, theme, context);
         }
