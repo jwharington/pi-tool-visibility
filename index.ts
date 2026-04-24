@@ -157,6 +157,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       promptGuidelines: getBuiltInTools(process.cwd())[toolName].promptGuidelines,
       parameters: getBuiltInTools(process.cwd())[toolName].parameters,
       prepareArguments: getBuiltInTools(process.cwd())[toolName].prepareArguments,
+      renderShell: "self",
 
       async execute(toolCallId, params, signal, onUpdate, ctx): Promise<AgentToolResult<any>> {
         rememberToolCall(toolCallId);
