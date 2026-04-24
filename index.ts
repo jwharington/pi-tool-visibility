@@ -72,6 +72,12 @@ const MODE_LABEL: Record<VisibilityMode, string> = {
 
 type BuiltInToolName = "read" | "grep" | "find" | "ls" | "bash" | "edit" | "write";
 
+const BUILT_IN_TOOL_NAMES: BuiltInToolName[] = ["read", "grep", "find", "ls", "bash", "edit", "write"];
+
+function isBuiltInToolName(value: unknown): value is BuiltInToolName {
+  return typeof value === "string" && (BUILT_IN_TOOL_NAMES as string[]).includes(value);
+}
+
 type BuiltInToolMap = Record<BuiltInToolName, any>;
 
 const builtInToolCache = new Map<string, BuiltInToolMap>();
@@ -136,12 +142,21 @@ export default function piToolVisibility(pi: ExtensionAPI) {
 
   let mode: VisibilityMode = "collapsed";
   let latestToolCallId: string | null = null;
+  let latestWrappedToolCallId: string | null = null;
   let requestFooterRender: (() => void) | null = null;
   const activeToolCallIds = new Set<string>();
+  const wrappedToolCallIds = new Set<string>();
 
   const rememberToolCall = (toolCallId: string | undefined): void => {
     if (!toolCallId) return;
     latestToolCallId = toolCallId;
+  };
+
+  const rememberWrappedToolCall = (toolCallId: string | undefined): void => {
+    if (!toolCallId) return;
+    wrappedToolCallIds.add(toolCallId);
+    latestWrappedToolCallId = toolCallId;
+    rememberToolCall(toolCallId);
   };
 
   const shouldHideToolCall = (toolCallId: string): boolean => {
@@ -149,7 +164,8 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     if (mode === "hide-all") return true;
     if (mode === "hide-older") {
       if (activeToolCallIds.has(toolCallId)) return false;
-      return latestToolCallId !== null && toolCallId !== latestToolCallId;
+      const latestVisibleToolCallId = latestWrappedToolCallId ?? latestToolCallId;
+      return latestVisibleToolCallId !== null && toolCallId !== latestVisibleToolCallId;
     }
     return false;
   };
@@ -199,7 +215,12 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       if (entry.type !== "message") continue;
       const message = (entry as any).message;
       if (message?.role === "toolResult" && typeof message.toolCallId === "string") {
-        rememberToolCall(message.toolCallId);
+        const toolName = message?.toolName ?? message?.name ?? message?.tool;
+        if (isBuiltInToolName(toolName)) {
+          rememberWrappedToolCall(message.toolCallId);
+        } else {
+          rememberToolCall(message.toolCallId);
+        }
       }
     }
   };
@@ -348,7 +369,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       renderShell: "self",
 
       async execute(toolCallId, params, signal, onUpdate, ctx): Promise<AgentToolResult<any>> {
-        rememberToolCall(toolCallId);
+        rememberWrappedToolCall(toolCallId);
         activeToolCallIds.add(toolCallId);
         const delegate = getBuiltInTools(ctx.cwd)[toolName];
         try {
@@ -416,14 +437,26 @@ export default function piToolVisibility(pi: ExtensionAPI) {
   });
 
   pi.on("tool_execution_start", (event, _ctx) => {
-    rememberToolCall(event.toolCallId);
+    const eventAny = event as any;
+    const eventToolName = eventAny?.toolName ?? eventAny?.name ?? eventAny?.tool;
+    if (isBuiltInToolName(eventToolName) || wrappedToolCallIds.has(event.toolCallId)) {
+      rememberWrappedToolCall(event.toolCallId);
+    } else {
+      rememberToolCall(event.toolCallId);
+    }
     activeToolCallIds.add(event.toolCallId);
     requestFooterRender?.();
   });
 
   pi.on("tool_execution_end", (event, _ctx) => {
+    const eventAny = event as any;
+    const eventToolName = eventAny?.toolName ?? eventAny?.name ?? eventAny?.tool;
     activeToolCallIds.delete(event.toolCallId);
-    rememberToolCall(event.toolCallId);
+    if (isBuiltInToolName(eventToolName) || wrappedToolCallIds.has(event.toolCallId)) {
+      rememberWrappedToolCall(event.toolCallId);
+    } else {
+      rememberToolCall(event.toolCallId);
+    }
     requestFooterRender?.();
   });
 
