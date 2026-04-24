@@ -1,15 +1,15 @@
 # pi-tool-visibility
 
-Pi extension that adds a 4-state tool visibility cycle:
+Pi extension that adds a 4-state tool visibility cycle. The cycle increases visibility on each activation:
 
-1. `expanded`
-2. `collapsed`
-3. `hide-older` (show latest tool call only)
-4. `hide-all`
+1. `hide-all`
+2. `hide-older` (show latest tool call only)
+3. `collapsed`
+4. `expanded`
 
 ## Commands
 
-- `/tool-visibility cycle`
+- `/tool-visibility cycle` (hide-all → hide-older → collapsed → expanded)
 - `/tool-visibility expanded`
 - `/tool-visibility collapsed`
 - `/tool-visibility hide-older`
