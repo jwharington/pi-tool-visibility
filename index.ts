@@ -490,7 +490,7 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     requestFooterRender?.();
   });
 
-  pi.registerShortcut("ctrl+alt+o", {
+  pi.registerShortcut("ctrl+alt+v", {
     description: "Cycle tool visibility (hide all -> hide older -> collapsed -> expanded)",
     handler: async (ctx) => {
       mode = nextMode(mode);
