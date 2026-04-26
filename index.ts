@@ -191,10 +191,8 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       "hide-all": " ",
     };
 
-    const meter = mode === "hide-all"
-      ? " "
-      : ctx.ui.theme.fg("dim", glyphByMode[mode]);
-    const themedStatus = `${ctx.ui.theme.fg("muted", "tools:")}${ctx.ui.theme.fg("muted", "[")}${meter}${ctx.ui.theme.fg("muted", "]")}`;
+    const meter = mode === "hide-all" ? " " : glyphByMode[mode];
+    const themedStatus = ctx.ui.theme.fg("dim", `🛠 ▕${meter}▏`);
 
     ctx.ui.setStatus("pi-tool-visibility", themedStatus);
     requestFooterRender?.();
