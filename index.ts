@@ -457,11 +457,6 @@ export default function piToolVisibility(pi: ExtensionAPI) {
     bootstrapFromSession(ctx);
     installFooter(ctx);
     applyMode(ctx);
-    ctx.ui.notify(
-      `pi-tool-visibility loaded (${MODE_LABEL[mode]}). Use /tool-visibility cycle|expanded|collapsed|hide-older|hide-all.`,
-      "info",
-      { timeout: 2500 },
-    );
   });
 
   pi.on("tool_execution_start", (event, _ctx) => {
