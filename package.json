@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Pi extension/package that adds a 4-state tool visibility cycle",
   "keywords": ["pi-package"],
+  "type": "module",
+  "scripts": {
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
   "pi": {
     "extensions": ["./index.ts"]
   },

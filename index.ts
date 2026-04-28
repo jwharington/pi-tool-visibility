@@ -10,6 +10,7 @@ import {
   type ExtensionAPI,
 } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type Component } from "@mariozechner/pi-tui";
+import { shouldHideToolCallForVisibilityMode, type VisibilityMode } from "./visibility";
 
 class EmptyComponent implements Component {
   render(_width: number): string[] {
@@ -53,15 +54,6 @@ class HiddenToolCallSummaryComponent implements Component {
     this.component.invalidate();
   }
 }
-
-type VisibilityMode = "expanded" | "collapsed" | "hide-older" | "hide-all";
-
-const MODE_ORDER: VisibilityMode[] = [
-  "hide-all",
-  "hide-older",
-  "collapsed",
-  "expanded",
-];
 
 const MODE_LABEL: Record<VisibilityMode, string> = {
   expanded: "expanded",
@@ -113,11 +105,6 @@ function parseMode(input: string): VisibilityMode | undefined {
   return undefined;
 }
 
-function nextMode(current: VisibilityMode): VisibilityMode {
-  const i = MODE_ORDER.indexOf(current);
-  return MODE_ORDER[(i + 1) % MODE_ORDER.length] ?? "expanded";
-}
-
 function sanitizeStatusText(text: string): string {
   return text
     .replace(/[\r\n\t]/g, " ")
@@ -164,20 +151,6 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       latestWrappedToolCallId = toolCallId;
     }
     rememberToolCall(toolCallId);
-  };
-
-  const shouldHideToolCall = (toolCallId: string): boolean => {
-    if (mode === "expanded" || mode === "collapsed") return false;
-
-    // Never hide in-progress tool executions.
-    if (activeToolCallIds.has(toolCallId)) return false;
-
-    if (mode === "hide-all") return true;
-    if (mode === "hide-older") {
-      const latestVisibleToolCallId = latestWrappedToolCallId ?? latestToolCallId;
-      return latestVisibleToolCallId !== null && toolCallId !== latestVisibleToolCallId;
-    }
-    return false;
   };
 
   const applyMode = (ctx: any): void => {
@@ -398,7 +371,16 @@ export default function piToolVisibility(pi: ExtensionAPI) {
       renderCall(args, theme, context): Component {
         const delegate = getBuiltInTools(context.cwd)[toolName];
 
-        if (shouldHideToolCall(context.toolCallId)) {
+        const canHide = shouldHideToolCallForVisibilityMode(
+          mode,
+          context.toolCallId,
+          activeToolCallIds,
+          latestWrappedToolCallId,
+          latestToolCallId,
+          context.executionStarted,
+        );
+
+        if (canHide) {
           const component = typeof delegate.renderCall === "function"
             ? delegate.renderCall(args, theme, context)
             : EMPTY_COMPONENT;
@@ -420,8 +402,16 @@ export default function piToolVisibility(pi: ExtensionAPI) {
 
       renderResult(result, options, theme, context): Component {
         const delegate = getBuiltInTools(context.cwd)[toolName];
+        const canHide = shouldHideToolCallForVisibilityMode(
+          mode,
+          context.toolCallId,
+          activeToolCallIds,
+          latestWrappedToolCallId,
+          latestToolCallId,
+          context.executionStarted,
+        );
 
-        if (shouldHideToolCall(context.toolCallId)) {
+        if (canHide) {
           if (typeof delegate.renderResult === "function") {
             try {
               // Let delegate advance/cleanup internal renderer state (e.g. timers),
