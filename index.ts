@@ -10,7 +10,7 @@ import {
   type ExtensionAPI,
 } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type Component } from "@mariozechner/pi-tui";
-import { shouldHideToolCallForVisibilityMode, type VisibilityMode } from "./visibility";
+import { nextMode, shouldHideToolCallForVisibilityMode, type VisibilityMode } from "./visibility";
 
 class EmptyComponent implements Component {
   render(_width: number): string[] {
